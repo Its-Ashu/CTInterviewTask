@@ -15,6 +15,13 @@ export default function ProductListScreen({ navigation }) {
   const dispatch = useDispatch();
   const [modalVisible, setModalVisible] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', price: '', image: '' });
+  const [quantities, setQuantities] = useState({});
+
+  const totalItems = Object.values(quantities).reduce((sum, qty) => sum + qty, 0);
+  const totalAmount = products.reduce(
+    (sum, product) => sum + product.price * (quantities[product.id] || 0),
+    0,
+  );
 
   const pickImage = () => {
     launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, response => {
@@ -62,24 +69,79 @@ export default function ProductListScreen({ navigation }) {
     setModalVisible(false);
   };
 
-  const renderProduct = ({ item }) => (
-    <View style={styles.card}>
-      <Image source={{ uri: item.image }} style={styles.productImage} />
-      <View style={styles.cardBody}>
-        <Text style={styles.productName}>{item.name}</Text>
-        <Text style={styles.productDesc} numberOfLines={2}>{item.description}</Text>
-        <View style={styles.cardFooter}>
-          <Text style={styles.price}>₹{item.price.toLocaleString('en-IN')}</Text>
-          <TouchableOpacity
-            style={styles.buyBtn}
-            onPress={() => navigation.navigate('Checkout', { product: item })}>
-            <Text style={styles.buyBtnText}>Buy Now</Text>
-            <Icon name="arrow-forward" size={14} color="#fff" />
-          </TouchableOpacity>
+  const increaseQty = productId => {
+    setQuantities(prev => ({
+      ...prev,
+      [productId]: (prev[productId] || 0) + 1,
+    }));
+  };
+
+  const decreaseQty = productId => {
+    setQuantities(prev => {
+      const current = prev[productId] || 0;
+      if (current <= 1) {
+        const next = { ...prev };
+        delete next[productId];
+        return next;
+      }
+      return { ...prev, [productId]: current - 1 };
+    });
+  };
+
+  const goToCheckout = () => {
+    const cartItems = products
+      .filter(product => (quantities[product.id] || 0) > 0)
+      .map(product => ({
+        product,
+        qty: quantities[product.id],
+      }));
+
+    if (cartItems.length === 0) {
+      return;
+    }
+
+    navigation.navigate('Checkout', {
+      cartItems,
+      onOrderComplete: () => setQuantities({}),
+    });
+  };
+
+  const renderProduct = ({ item }) => {
+    const qty = quantities[item.id] || 0;
+
+    return (
+      <View style={styles.card}>
+        <Image source={{ uri: item.image }} style={styles.productImage} />
+        <View style={styles.cardBody}>
+          <Text style={styles.productName}>{item.name}</Text>
+          <Text style={styles.productDesc} numberOfLines={2}>{item.description}</Text>
+          <View style={styles.cardFooter}>
+            <Text style={styles.price}>₹{item.price.toLocaleString('en-IN')}</Text>
+            {qty === 0 ? (
+              <TouchableOpacity style={styles.buyBtn} onPress={() => increaseQty(item.id)}>
+                <Text style={styles.buyBtnText}>Buy Now</Text>
+                <Icon name="add" size={14} color="#fff" />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.qtyControl}>
+                <TouchableOpacity
+                  style={styles.qtyActionBtn}
+                  onPress={() => decreaseQty(item.id)}>
+                  <Icon name="remove" size={16} color="#FF6B35" />
+                </TouchableOpacity>
+                <Text style={styles.qtyValue}>{qty}</Text>
+                <TouchableOpacity
+                  style={styles.qtyActionBtn}
+                  onPress={() => increaseQty(item.id)}>
+                  <Icon name="add" size={16} color="#FF6B35" />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -106,6 +168,16 @@ export default function ProductListScreen({ navigation }) {
           </View>
         }
       />
+
+      {totalItems > 0 && (
+        <TouchableOpacity style={styles.checkoutFab} onPress={goToCheckout}>
+          <View>
+            <Text style={styles.checkoutFabTitle}>Checkout ({totalItems})</Text>
+            <Text style={styles.checkoutFabSubtitle}>₹{totalAmount.toLocaleString('en-IN')}</Text>
+          </View>
+          <Icon name="arrow-forward-circle" size={26} color="#FFF" />
+        </TouchableOpacity>
+      )}
 
       {/* FAB */}
       <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
@@ -223,9 +295,49 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   buyBtnText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
+  qtyControl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A1A1A',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    gap: 10,
+  },
+  qtyActionBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: '#101010',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  qtyValue: { color: '#FFF', fontSize: 16, fontWeight: '700', minWidth: 20, textAlign: 'center' },
+  checkoutFab: {
+    position: 'absolute',
+    left: 16,
+    right: 90,
+    bottom: 30,
+    backgroundColor: '#FF6B35',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#FF6B35',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 9,
+  },
+  checkoutFabTitle: { color: '#FFF', fontWeight: '800', fontSize: 15 },
+  checkoutFabSubtitle: { color: '#FFE5D8', fontSize: 12, marginTop: 2, fontWeight: '600' },
   fab: {
     position: 'absolute',
-    bottom: 90,
+    bottom: 30,
     right: 20,
     width: 58,
     height: 58,
